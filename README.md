@@ -1,4 +1,4 @@
-# 📊 About bank-accounting
+# 📊 Petunia Bank
 
 ## 🧱 Frameworks
 
