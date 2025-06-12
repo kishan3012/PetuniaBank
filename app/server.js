@@ -1,6 +1,8 @@
-
 const express = require("express")
+const session = require('express-session')
+
 const { Client } = require("pg")
+
 
 const app = express()
 
@@ -18,32 +20,46 @@ app.set("views", path.join(__dirname, "templates"))
 
 
 const { auth } = require("express-openid-connect")
-const port = 3000
 const config = {
   authRequired: false,
   auth0Logout: true,
   secret: process.env.SECRET,
-  baseURL: `http://localhost:${port}`,
+  baseURL: `http://localhost:${process.env.SERVER_PORT}`,
   clientID: process.env.CLIENT_ID,
   issuerBaseURL: process.env.ISSUER_BASE_URL,
 }
 
 app.use(auth(config))
 
+app.use(session({
+    name: "petuniaBank",
+    secret: process.env.SESSION_SECRET,
+    resave: false, //not reloaded foreach request
+    saveUninitialized: false, //at least one field inside
+    cookie: { secure: false } //true for HTTPS
+}))
+
 const bankConfig = {
-    "minDeposit" : 200,
-    "maxDeposit" : 2000,
+    minDeposit : 200,
+    maxDeposit : 2000,
 
-    "maxDailyWithdraws" : 1000,
+    maxDailyWithdraws : 1000,
 
-    "disableDay" : "domenica"
+    disableDay : "domenica",
+
+    dateFormat: "it-IT"
 }
 
+const ROLES = {
+    admin : "danger",
+    broker: "warning",
+    user: "success"
+}
 
 const con = new Client({
     host: "localhost",
     user: "postgres",
-    port: 8000,
+    port: process.env.POSTEGRESQL_PORT,
     password: "1234",
     database: "bankaccount"
 })
@@ -53,25 +69,44 @@ con.connect()
     .catch(err => console.error("DB connection error:", err))
 
 
+function returnError(msg){ return {success: false, error: msg} }  
     
 function randomNumber(min=0, max=1){ return Math.floor(Math.random() * (max - min + 1)) + min }
     
-function getCurrentDate(){ return new Date().toLocaleDateString() }
+function getCurrentDate(){ return new Date().toLocaleDateString(bankConfig.dateFormat) }
 
 //MOCK CURRENT DATE
-function mockCurrentDate() { 
-    return `${randomNumber(1,27)}/${randomNumber(1,12)}/${randomNumber(1900, 2025)}`
-}
+// function mockCurrentDate() { 
+//     return `${randomNumber(1,27)}/${randomNumber(1,12)}/${randomNumber(1900, 2025)}`
+// }
+
+function getDayArticle(day=bankConfig.disableDay){ return day.charAt(0) == "d" ? "la" : "il" }
 
 
-function bankBasicCheck(amount){
-    if(new Date().toLocaleDateString("it-IT", {weekday: "long"}) == bankConfig.disableDay){
-        throw new Error(`Operazioni disabilitate per ${bankConfig.disableDay.charAt(0).toUpperCase() + bankConfig.disableDay.slice(1)}`)
+function bankBasicCheck(amount, req, csrf_token){
+    if(req.session.csrf_token != csrf_token){
+        throw new Error("CSRF Token Mismatch")
+    }
+
+    if(new Date().toLocaleDateString(bankConfig.dateFormat, {weekday: "long"}) == bankConfig.disableDay){
+        throw new Error(`Operazioni disabilitate ${getDayArticle()} ${bankConfig.disableDay.charAt(0).toUpperCase() + bankConfig.disableDay.slice(1)}`)
     }
     
     if(amount <= 0){
         throw new Error("Amount non Valido")
     }
+}
+
+
+const alphabetImport = require('alphabet');
+const alphabet = [...alphabetImport.lower, ...alphabetImport.upper]
+
+function getCSRF(){
+    let csrf_token = ""
+
+    for(let i=0;i<process.env.CSRF_TOKEN_LENGTH;i++) csrf_token+= alphabet[randomNumber(0, alphabet.length-1)]
+
+    return csrf_token
 }
 
 
@@ -81,6 +116,20 @@ function isRole(req, role){ return getRoles(req).includes(role)}
 
 function isAdmin(req){ return isRole(req, "admin")}
 function isBroker(req){ return isRole(req, "broker") || isAdmin(req)}
+
+
+
+function formatAdminViewQuery(){
+    const rolesList = Object.keys(ROLES)
+    let cases = ""
+    
+
+    for(let i=0;i<rolesList.length;i++){ 
+        cases+= `WHEN '${rolesList[i]}' THEN ${i+1} `
+    }
+
+    return cases
+}
 
 
 function formatCurrency(amount=0){
@@ -96,22 +145,20 @@ async function addHistory(oauth_sub, amount, type){
 }
 
 async function getBalance(oauth_sub){
-    let balance = (await con.query(`
+    return ((await con.query(`
         SELECT SUM(
 	        CASE 
 		        WHEN actiontype='deposit' THEN amount
 		        WHEN actiontype='withdraw' THEN -amount
 		        ELSE 0
 
-	    END) AS balance FROM transactions WHERE oauth_sub = $1`, [oauth_sub])).rows[0]["balance"]
-
-    return balance ?? 0
+	    END) AS balance FROM transactions WHERE oauth_sub = $1`, [oauth_sub])).rows[0]["balance"]) ?? 0
 }
 
 
 async function getAccountInfo(req){
     try {
-        let oauth_sub = getOAuthSub(req)
+        const oauth_sub = getOAuthSub(req)
         
         return {
             success: true,
@@ -122,37 +169,39 @@ async function getAccountInfo(req){
             dailyWithdraws: formatCurrency(await getDailyWithdraws(oauth_sub))
         }
 
-    } catch (error) {
-        return {
-            success: false,
-            error: "Failed to fetch account"
-        }
-    }
+    } catch (error) { return returnError("Failed to fetch account") }
 }
 
 
 async function getDailyWithdraws(oauth_sub){
-    let dailyWithdraws = (await con.query("SELECT sum(amount) AS dailyWithdraws FROM transactions WHERE oauth_sub = $1 and actiontype='withdraw' and actiondate=$2", [oauth_sub, getCurrentDate()])).rows[0]["dailywithdraws"]
-    return dailyWithdraws ?? 0
+    return ((
+        await con.query("SELECT sum(amount) AS dailyWithdraws FROM transactions WHERE oauth_sub = $1 and actiontype='withdraw' and actiondate=$2",
+
+        [oauth_sub, getCurrentDate()])).rows[0]["dailywithdraws"]) ?? 0
 }
 
-
-async function getUserInfo(oauth_sub){
-    return (await con.query("SELECT * from users WHERE oauth_sub = $1", [oauth_sub])).rows[0]
-}
 
 async function nicknameHandler(req){
     const oauth_sub = getOAuthSub(req)
 
     const auth0Nickname = (await getAccountInfo(req))["nickname"]
-    const dbNickname = (await getUserInfo(oauth_sub))
 
-    if(dbNickname == undefined){
-        return await con.query("INSERT INTO users (oauth_sub, nickname) VALUES ($1, $2)", [oauth_sub, auth0Nickname])
+    const dbInfo = (await con.query("SELECT * from users WHERE oauth_sub = $1", [oauth_sub])).rows[0]
+    
+    let userRole = getRoles(req)
+    userRole = userRole.length == 0 ? "user" : userRole[0]
+
+
+    if(dbInfo == undefined){
+        return await con.query("INSERT INTO users (oauth_sub, nickname, role) VALUES ($1, $2, $3)", [oauth_sub, auth0Nickname, userRole])
     }
 
-    if(dbNickname["nickname"] != auth0Nickname){
+    if(dbInfo["nickname"] != auth0Nickname){
         return await con.query("UPDATE users SET nickname = $1 WHERE oauth_sub = $2", [auth0Nickname, oauth_sub]) 
+    }
+
+    if(dbInfo["role"] != userRole){
+        return await con.query("UPDATE users SET role = $1 WHERE oauth_sub = $2", [userRole, oauth_sub]) 
     }
 }
 
@@ -184,12 +233,32 @@ USERS
 app.get("/home", async (req, res) => {
     if (!req.oidc.isAuthenticated()) { return res.redirect("/") }
     
+    if(req.session.csrf_token==undefined) req.session.csrf_token = getCSRF()
+        
     await nicknameHandler(req)
     
-    res.render("index", {data : await getAccountInfo(req), permissions: {
-                                                                adminView: isAdmin(req),
-                                                                brokerView: isBroker(req)
-    }})
+    res.render("index", {
+        data : await getAccountInfo(req),
+
+        permissions: {
+            adminView: isAdmin(req),
+            brokerView: isBroker(req)
+        },
+
+        bankConfig: {
+            "Prelievo massimo giornaliero:" : `${bankConfig.maxDailyWithdraws} €`,
+            "Deposito minimo:" : `${bankConfig.minDeposit} €`,
+            "Deposito massimo:" : `${bankConfig.maxDeposit} €`,
+            "Operazioni non permesse" : `${getDayArticle()} ${bankConfig.disableDay}`,
+
+            "Il saldo non può essere negativo" : null,
+
+            "Non è possibile depositare 0 €" : null
+        },
+
+        csrf_token : req.session.csrf_token
+                        
+    })
 })
 
 app.get("/", (req, res) => {
@@ -208,7 +277,7 @@ app.get("/account", requiresAuth(), async (req, res) => res.json(await getAccoun
 
 app.get("/account/finance", requiresAuth(), async (req, res) => {
     try {
-        let accountInfo = await getAccountInfo(req)
+        const accountInfo = await getAccountInfo(req)
         
         res.json({
             success: true,
@@ -217,20 +286,16 @@ app.get("/account/finance", requiresAuth(), async (req, res) => {
         })
 
     } catch (error) {
-        res.json({
-            success: false,
-            error: "Failed to fetch finance"
-        })
+        res.json(returnError("Failed to fetch finance"))
     }
 })
 
 
 app.post("/account/deposit", requiresAuth(), async (req, res) => {
-    const { amount } = req.body
-
+    const { amount, csrf_token } = req.body
 
     try {
-        bankBasicCheck(amount)
+        bankBasicCheck(amount, req, csrf_token)
         
         if (amount < bankConfig.minDeposit) {
             throw new Error("Errore di Deposito. Importo inferiore al Limite")
@@ -242,16 +307,9 @@ app.post("/account/deposit", requiresAuth(), async (req, res) => {
 
         await addHistory(getOAuthSub(req), amount, "deposit")
 
-        res.json({
-            success: true,
-        })
+        res.json({ success: true })
 
-    } catch (error) {
-        res.json({
-            success: false,
-            error: error.message
-        })
-    }
+    } catch (error) { res.json(returnError(error.message)) }
 })
 
 
@@ -259,10 +317,10 @@ app.post("/account/deposit", requiresAuth(), async (req, res) => {
 
 // manda info account a frontend
 app.post("/account/withdraw", requiresAuth(), async (req, res) => {
-    const { amount } = req.body
+    const { amount, csrf_token } = req.body
     
     try {
-        bankBasicCheck(amount)
+        bankBasicCheck(amount, req, csrf_token)
         
         const oauth_sub = getOAuthSub(req)
 
@@ -274,7 +332,7 @@ app.post("/account/withdraw", requiresAuth(), async (req, res) => {
             throw new Error("Errore di Prelievo. Limite Massimo Raggiunto")
         }
         
-        let dailyWithdraws = await getDailyWithdraws(oauth_sub)
+        const dailyWithdraws = await getDailyWithdraws(oauth_sub)
 
         if(dailyWithdraws+amount > bankConfig.maxDailyWithdraws){
             throw new Error("Limite di Prelievo Raggiunto")
@@ -283,16 +341,9 @@ app.post("/account/withdraw", requiresAuth(), async (req, res) => {
         
         await addHistory(oauth_sub, amount, "withdraw")
         
-        res.json({
-            success: true
-        })
+        res.json({ success: true })
 
-    } catch (error) {
-        res.json({
-            success: false,
-            error: error.message
-        })
-    }
+    } catch (error) { res.json(returnError(error.message)) }
 })
 
 
@@ -303,12 +354,8 @@ app.get("/account/history", requiresAuth(), async (req, res) => {
             success: true,
             history: (await con.query("SELECT * from transactions WHERE oauth_sub = $1", [getOAuthSub(req)])).rows
         })
-    } catch (error) {
-        res.json({
-            success: false,
-            error: "Failed to fetch history"
-        })
-    }
+        
+    } catch (error) { res.json( returnError("Failed to fetch history")) }
 })
 
 
@@ -324,16 +371,18 @@ ADMIN
 app.get("/admin/view", requiresAuth(), requiresAdmin, async (req, res) => {
     try{
         const usersInfo = []
-        let oauths = (await con.query("SELECT oauth_sub from users GROUP BY oauth_sub")).rows
-
-        for(let oauth of oauths){
-            oauth = oauth["oauth_sub"]
-
-            if(oauth == getOAuthSub(req)){ continue }
+        const infos = (await con.query(`SELECT * from users ORDER BY CASE role ${formatAdminViewQuery()}END`)).rows
+        
+        for(row of infos){
+            let oauth = row["oauth_sub"]
 
             usersInfo.push({
+                isYou: oauth==getOAuthSub(req),
+                
                 oauthID : oauth,
-                nickname: (await getUserInfo(oauth))["nickname"],
+                nickname: row["nickname"],
+                role: `${ROLES[row["role"]]}-${row["role"]}`,
+
                 balance: formatCurrency(await getBalance(oauth)),
                 dailyWithdraws: formatCurrency(await getDailyWithdraws(oauth)),
             })
@@ -344,12 +393,8 @@ app.get("/admin/view", requiresAuth(), requiresAdmin, async (req, res) => {
             usersInfo: usersInfo
         })
 
-    }catch(error){
-        res.json({
-            success: false,
-            error: "Failed to fetch Users Info"
-        })
-    }
+    } catch(error){ 
+        res.json(returnError("Failed to fetch Users Info")) }
     
 })
 
@@ -411,14 +456,7 @@ app.get("/broker/market", requiresAuth(), requiresBroker, async (req, res) => {
             }
         })
 
-    }
-    
-    catch(error){
-        res.json({
-            success: false,
-            error: "Failed to fetch Market Trend"
-        })
-    }
+    } catch(error){ res.json(returnError("Failed to fetch Market Trend")) }
 })
 
 
@@ -427,8 +465,8 @@ app.use((req, res) => {
     res.redirect(req.oidc.isAuthenticated() ? "/home" : "/")
 })
 
-app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`)
+app.listen(process.env.SERVER_PORT, () => {
+    console.log(`Server running on http://localhost:${process.env.SERVER_PORT}`)
 })    
 
 module.exports = app

@@ -42,6 +42,7 @@ function editOpenIdMock(dataRows={isAuthenticated: true, role: "admin"}){
 
 jest.mock("express-openid-connect", () => ({
   auth: () => (req, res, next) => {
+    req.session = {csrf_token: "petunia-csrf"}
     req.oidc = openidMock
     next()
   },
@@ -199,29 +200,36 @@ describe("API Account Endpoints", () => {
 
 
   test("/account/deposit => Deposit Success", async () => {
-    const res = await request(app).post("/account/deposit").send({amount: 500})
+    const res = await request(app).post("/account/deposit").send({amount: 500, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(true)
   })
 
   
   test("/account/deposit => Deposit Failed (under min amount)", async () => {
-    const res = await request(app).post("/account/deposit").send({amount: 199})
+    const res = await request(app).post("/account/deposit").send({amount: 199, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/inferiore/)
   })
 
 
   test("/account/deposit => Deposit Failed (over max amount)", async () => {
-    const res = await request(app).post("/account/deposit").send({amount: 2001})
+    const res = await request(app).post("/account/deposit").send({amount: 2001, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/superiore/)
   })
 
 
   test("/account/deposit => Deposit Failed (amount <= 0)", async () => {
-    const res = await request(app).post("/account/deposit").send({amount: 0})
+    const res = await request(app).post("/account/deposit").send({amount: 0, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/non Valido/)
+  })
+
+
+  test("/account/deposit => Deposit Failed (CSRF Token Mismatch)", async () => {
+    const res = await request(app).post("/account/deposit").send({amount: 500, csrf_token: "NOT-petunia-csrf"})
+    expect(res.body.success).toBe(false)
+    expect(res.body.error).toMatch(/CSRF/)
   })
 
 
@@ -244,7 +252,7 @@ describe("API Account Endpoints", () => {
       if(sql.includes("SELECT sum(amount) AS dailyWithdraws")) return Promise.resolve({rows: [{dailywithdraws: 0}]})
     })
 
-    const res = await request(app).post("/account/withdraw").send({amount: 500})
+    const res = await request(app).post("/account/withdraw").send({amount: 500, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(true)
   })
 
@@ -254,7 +262,7 @@ describe("API Account Endpoints", () => {
       if(sql.includes("SELECT SUM(")) return Promise.resolve({rows: [{balance: 50}]})
     })
 
-    const res = await request(app).post("/account/withdraw").send({amount: 100})
+    const res = await request(app).post("/account/withdraw").send({amount: 100, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/insufficienti/)
   })
@@ -267,7 +275,7 @@ describe("API Account Endpoints", () => {
       if(sql.includes("SELECT sum(amount) AS dailyWithdraws")) return Promise.resolve({rows: [{dailywithdraws: 0}]})
     })
 
-    const res = await request(app).post("/account/withdraw").send({amount: 1500})
+    const res = await request(app).post("/account/withdraw").send({amount: 1500, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/Limite/)
     expect(res.body.error).toMatch(/Raggiunto/)
@@ -281,7 +289,7 @@ describe("API Account Endpoints", () => {
       if(sql.includes("SELECT sum(amount) AS dailyWithdraws")) return Promise.resolve({rows: [{dailywithdraws: 800}]})
     })
 
-    const res = await request(app).post("/account/withdraw").send({amount: 201})
+    const res = await request(app).post("/account/withdraw").send({amount: 201, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/di Prelievo/)
     expect(res.body.error).toMatch(/Raggiunto/)
@@ -290,19 +298,25 @@ describe("API Account Endpoints", () => {
 
   test("/account/withdraw => Withdraw Failed (amount <= 0)", async () => {
 
-    const res = await request(app).post("/account/withdraw").send({amount: -10})
+    const res = await request(app).post("/account/withdraw").send({amount: -10, csrf_token: "petunia-csrf"})
     expect(res.body.success).toBe(false)
     expect(res.body.error).toMatch(/non Valido/)
   })
 
 
-  test("/account/deposit => Deposit Failed (Not Auth)", async () => {
+  test("/account/withdraw => Withdraw Failed (CSRF Token Mismatch)", async () => {
+    const res = await request(app).post("/account/withdraw").send({amount: 1, csrf_token: "NOT-petunia-csrf"})
+    expect(res.body.success).toBe(false)
+    expect(res.body.error).toMatch(/CSRF/)
+  })
+
+
+  test("/account/withdraw => Withdraw Failed (Not Auth)", async () => {
     editOpenIdMock({isAuthenticated: false, role:""})
 
     const res = await request(app).post("/account/withdraw")
     expect(res.status).toBe(302)
   })
-
 
 
 
@@ -338,9 +352,7 @@ describe("API Admin Endpoints", () => {
 
   test("/admin/view => Admin Users View Success", async () => {
     client.query.mockImplementation(sql => {
-      if(sql.includes("SELECT oauth_sub from users")) return Promise.resolve({rows: [{oauth_sub: "1XXXXXXXXXXXXXXXXXXXXXXX"}]})
-      
-      if(sql.includes("SELECT * from users WHERE oauth_sub")) return Promise.resolve({rows: [{oauth_sub: "1XXXXXXXXXXXXXXXXXXXXXXX", nickname: "mock"}]})
+      if(sql.includes("SELECT * from users ORDER BY CASE")) return Promise.resolve({rows: [{oauth_sub: "1XXXXXXXXXXXXXXXXXXXXXXX", nickname: "mock", role: "user"}]})
 
       if(sql.includes("SELECT SUM(")) return Promise.resolve({rows: [{balance: 5000}]})
 

@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport\" content="width=device-width, initial-scale=1.0">
     <title>Banca Digitale - Home</title>
+    <link rel="icon" href="./img/favicon.ico">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="./css/index.css">
@@ -80,8 +81,9 @@
                         <div id="transaction-form">
                             <div class="mb-4">
                                 <label for="amount" class="form-label">Importo (€)</label>
-                                <input type="number" class="form-control" id="amount" placeholder="Inserisci l'importo"
-                                    min="1" step="0.01">
+                                <input type="number" class="form-control" id="amount" placeholder="Inserisci l'importo" step="0.01">
+                                
+                                <input type="hidden" value="<%= csrf_token %>" id="csrf_token">
                             </div>
 
                             <div class="row">
@@ -135,21 +137,25 @@
                 <div class="info-box">
                     <h6><i class="fas fa-info-circle me-2"></i>Regole e Limiti</h6>
                     <div class="row">
-                        <div class="col-md-6">
-                            <ul>
-                                <li>Prelievo massimo giornaliero: 1.000 €</li>
-                                <li>Deposito minimo: 200 €</li>
-                                <li>Deposito massimo: 2.000 €</li>
-                            </ul>
-                        </div>
-                        <div class="col-md-6">
-                            <ul>
-                                <li>Operazioni non permesse la domenica</li>
-                                <li>Il saldo non può essere negativo</li>
-                                <li>Non è possibile depositare 0 €</li>
-                            </ul>
-                        </div>
+                        <%
+                            const config = Object.keys(bankConfig)
+                            const len = Math.ceil(config.length/2)
+
+                            const columns = [config.slice(0, len), config.slice(len)]
+                        %>
+
+                        <% columns.forEach(column => { %>
+                            <div class="col-md-6">
+                                <ul>
+                                    <% column.forEach(k => { %>
+                                        <li><%= k %> <%= bankConfig[k] ?? "" %></li>
+                                    <% }); %>
+                                </ul>
+                            </div>
+                        <% }) %>
+                        
                     </div>
+
                 </div>
                 <!--Non authentificato messaggio-->
                 <div class="text-center d-none" id="notAuthenticatedMessage">

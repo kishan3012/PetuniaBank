@@ -69,6 +69,7 @@ npm install express
 npm install express-openid-connect    
 npm install dotenv
 npm install path
+npm install alphabet
 
 # Run tests
 npx jest
