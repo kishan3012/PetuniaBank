@@ -47,7 +47,10 @@ h1 {
 #fatturationButton {
     display: block;
     margin: 0 auto;
-    padding: 0.5em 2em;
+    padding: 0.4em 1.2em;
+    font-size: 1rem;
+    min-width: 120px;
+    max-width: 220px;
 }
 
 @media (max-width: 576px) {
@@ -62,8 +65,10 @@ h1 {
         max-height: 250px !important;
     }
     #fatturationButton {
-        width: 100%;
-        padding: 0.75em 0;
-        font-size: 1.1em;
+        width: 80%;
+        min-width: 90px;
+        max-width: 150px;
+        padding: 0.5em 0.5em;
+        font-size: 0.9rem;
     }
 }

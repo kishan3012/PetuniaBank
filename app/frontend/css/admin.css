@@ -94,4 +94,8 @@ h2 {
     .navbar-spacer {
         height: 56px;
     }
+    .table-responsive th:first-child{
+        display: none;
+    }
 }
+
