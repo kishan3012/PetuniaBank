@@ -37,11 +37,33 @@ h1 {
 }
 
 #myChart{
+    width: 100% !important;
+    height: auto !important;
     max-width:1000px;
     max-height:500px;
+    display: block;
+    margin: 0 auto;
 }
 #fatturationButton {
     display: block;
     margin: 0 auto;
-        padding: 0.5em 2em;
+    padding: 0.5em 2em;
+}
+
+@media (max-width: 576px) {
+    h1 {
+        font-size: 1.5rem;
+    }
+    .navbar-spacer {
+        height: 56px;
+    }
+    #myChart {
+        max-width: 100% !important;
+        max-height: 250px !important;
+    }
+    #fatturationButton {
+        width: 100%;
+        padding: 0.75em 0;
+        font-size: 1.1em;
+    }
 }

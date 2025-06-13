@@ -4,7 +4,7 @@
 <head>
 
     <meta charset="UTF-8">
-    <meta name="viewport\" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
     <title>Banca Digitale - Home</title>
     <link rel="icon" href="./img/favicon.ico">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
@@ -13,17 +13,36 @@
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-trasparent position-fixed w-100 mb-5"
-        style="z-index: 1000; top: 0;position: fixed;">
-        <div class="container p-2">
-            <img class="rounded img-fluid" width="5%" id="profilePicture">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-transparent fixed-top py-2 px-3" style="z-index: 1000;">
+        <div class="container d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <img src="./img/favicon.ico" alt="Profilo" id="profilePicture" class="rounded-circle me-3"
+                    style="width:40px; height:40px; object-fit: cover;">
+                <span class="navbar-brand mb-0 h5 text-white">Banca Digitale</span>
+            </div>
 
-            <a class="d-none" href="./admin.html" id="adminView"><i class="fas fa-user me-2"></i>Admin</a>
-            <a class="d-none" href="./broker.html" id="brokerView"><i class="fas fa-user me-2"></i>Market Trend</a>
-            <a class="btn btn-outline-light"><i class="fas fa-user me-2"></i>Logout</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false"
+                aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse justify-content-end mobile-center" id="navbarSupportedContent">
+                <div class="d-flex flex-column align-items-center gap-3 mt-2 mt-lg-0">
+                    <a href="./admin.html" id="adminView" class="btn btn-outline-light btn-sm d-none">Admin</a>
+                    <a href="./broker.html" id="brokerView" class="btn btn-outline-light btn-sm d-none">Market Trend</a>
+                    <button class="btn btn-outline-light btn-sm" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt me-1"></i>Logout
+                    </button>
+                </div>
+            </div>
+
         </div>
     </nav>
+
+
     <div class="navbar-spacer"></div>
+
     <div class="container py-5">
         <!--video di sfondo-->
         <div class="video-background">
@@ -74,8 +93,9 @@
                         <div id="transaction-form">
                             <div class="mb-4">
                                 <label for="amount" class="form-label">Importo (€)</label>
-                                <input type="number" class="form-control" id="amount" placeholder="Inserisci l'importo" step="0.01">
-                                
+                                <input type="number" class="form-control" id="amount" placeholder="Inserisci l'importo"
+                                    step="0.01">
+
                                 <input type="hidden" value="<%= csrf_token %>" id="csrf_token">
                             </div>
 

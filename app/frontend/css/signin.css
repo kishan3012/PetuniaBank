@@ -169,13 +169,24 @@ body {
 @media (max-width: 576px) {
     .login-container {
         margin: 1rem;
+        max-width: 100%;
     }
 
     .login-form {
-        padding: 1.5rem;
+        padding: 1.2rem;
     }
 
     .login-header {
-        padding: 1.5rem 1.5rem 1rem;
+        padding: 1.2rem 1.2rem 1rem;
+    }
+
+    .rainbow-header {
+        font-size: 1.3rem;
+        margin-top: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+    }
+
+    .login-card h1 {
+        font-size: 1.3rem;
     }
 }
