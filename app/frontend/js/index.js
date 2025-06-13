@@ -18,15 +18,16 @@ const balanceElement = document.getElementById('balance')
 const dailyWithdrawsElement = document.getElementById('dailyWithdraws')
 
 
-const csrf_token = document.querySelector("#csrf_token").value
-
 
 const rowRules = document.querySelector("#rowRules")
 
 
 function updateInfo(){
     fetch("http://localhost:3000/account", {
-    credentials: "include"
+    credentials: "include",
+    headers: getTokenHeader()
+
+
     }).then(r => r.json()).then(r => {
         if(r["success"]){
             nickName.textContent = r["nickname"]
@@ -43,7 +44,9 @@ function updateInfo(){
 //aggiorna cronologia pagamenti
 function updatePaymentHistory(){
     fetch("http://localhost:3000/account/history", {
-    credentials: "include"
+    credentials: "include",
+    headers : getTokenHeader()
+
     }).then(r => r.json())
     .then(r => {
         if(r["success"] && r["history"].length > 0){
@@ -71,14 +74,17 @@ function updatePaymentHistory(){
 
 // gestione transazioni
 function handleTransaction(type) {
-    const data = {amount: parseFloat(amountInput.value), csrf_token: csrf_token}
+    const data = {amount: parseFloat(amountInput.value)}
 
     fetch(`http://localhost:3000/account/${type}`, {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(data)
+        
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', "Authorization" : `Bearer ${getToken()}`},
+
+        credentials: "include",
+
+        body: JSON.stringify(data)
+        
     }).then(r => r.json())   
     .then(r => {
         if(r["success"]){
@@ -185,8 +191,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     fetch("http://localhost:3000/home/info", {
-        credentials: "include"
-    }).then(r => r.json()).then(r => {
+        credentials: "include",
+        headers : getTokenHeader()
+    }).then(r => {
+        setToken(r.headers.get("Authorization"))
+        return r.json()
+    }).then(r => {
 
         //Buttons
         Object.keys(r["permissions"]).forEach(p => {

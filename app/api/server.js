@@ -1,5 +1,4 @@
 const express = require("express")
-const session = require('express-session')
 const cors = require("cors")
 
 const { Client } = require("pg")
@@ -7,57 +6,65 @@ const { Client } = require("pg")
 
 const app = express()
 
-app.use(cors({
-  origin: process.env.ALLOWED_WEBSITE,  // la tua origine frontend precisa
-  credentials: true                 // abilita invio cookie e credenziali
-}));
-
-//CORS BYPASS
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', process.env.ALLOWED_WEBSITE);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST');
-
-    next();
-})
-
-
-app.use(express.json())
-
 const dotenv = require("dotenv")
 dotenv.config()
 
-const path = require("path")
 
-app.use(express.static(path.join(__dirname, "static")))
+const {expressjwt: jwt} = require('express-jwt')
+const jwksRsa = require('jwks-rsa')
 
-app.set("view engine", "ejs")
-app.set("views", path.join(__dirname, "templates"))
+const checkJwt = jwt({
+  secret: jwksRsa.expressJwtSecret({ jwksUri: `${process.env.DOMAIN}.well-known/jwks.json` }),
+  audience: process.env.AUDIENCE,
+  issuer: process.env.DOMAIN,
+  algorithms: ['RS256']
+})
+
+app.use(cors({
+  origin: process.env.ALLOWED_WEBSITE,  // la tua origine frontend precisa
+  credentials: true                 // abilita invio cookie e credenziali
+}))
 
 
 const { auth } = require("express-openid-connect")
+
 const config = {
   authRequired: false,
   auth0Logout: true,
-  secret: process.env.SECRET,
+  secret: process.env.SESSION_SECRET,
   baseURL: `http://localhost:${process.env.SERVER_PORT}`,
   clientID: process.env.CLIENT_ID,
-  issuerBaseURL: process.env.ISSUER_BASE_URL,
-
+  clientSecret: process.env.CLIENT_SECRET, 
+  issuerBaseURL: process.env.DOMAIN,
   authorizationParams: {
-    redirect_uri: 'http://localhost:5500/app/frontend/callback',
-    }
+    response_type: "code",
+    scope: 'openid profile email offline_access',
+    audience: process.env.AUDIENCE,
+  }
 }
 
 app.use(auth(config))
 
-app.use(session({
-    name: "petuniaBank",
-    secret: process.env.SESSION_SECRET,
-    resave: false, //not reloaded foreach request
-    saveUninitialized: false, //at least one field inside
-    cookie: { secure: false } //true for HTTPS
-}))
+
+
+const WEB_ACCESS = ["/", "/logout"]
+
+//CORS BYPASS + Only Fetch Requests
+app.use((req, res, next) => {
+    // if(!WEB_ACCESS.includes(req.path) && req.get("Accept").includes("text/html")){
+    //     return res.redirect(`${process.env.ALLOWED_WEBSITE}/app/frontend/`)
+    // }
+
+    res.header('Access-Control-Allow-Origin', process.env.ALLOWED_WEBSITE)
+    res.header('Access-Control-Allow-Credentials', 'true')
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    res.header('Access-Control-Allow-Methods', 'GET, POST')
+
+    next()
+})
+
+app.use(express.json())
+
 
 const bankConfig = {
     minDeposit : 200,
@@ -103,10 +110,7 @@ function getCurrentDate(){ return new Date().toLocaleDateString(bankConfig.dateF
 function getDayArticle(day=bankConfig.disableDay){ return day.charAt(0) == "d" ? "la" : "il" }
 
 
-function bankBasicCheck(amount, req, csrf_token){
-    // if(req.session.csrf_token != csrf_token){
-    //     throw new Error("CSRF Token Mismatch")
-    // }
+function bankBasicCheck(amount){
 
     if(new Date().toLocaleDateString(bankConfig.dateFormat, {weekday: "long"}) == bankConfig.disableDay){
         throw new Error(`Operazioni disabilitate ${getDayArticle()} ${bankConfig.disableDay.charAt(0).toUpperCase() + bankConfig.disableDay.slice(1)}`)
@@ -118,7 +122,7 @@ function bankBasicCheck(amount, req, csrf_token){
 }
 
 
-const alphabetImport = require('alphabet');
+const alphabetImport = require('alphabet')
 const alphabet = [...alphabetImport.lower, ...alphabetImport.upper]
 
 function getCSRF(){
@@ -253,7 +257,22 @@ USERS
 */
 
 
-app.get("/home/info", requiresAuth(), async (req, res) => {
+app.get("/", async(req, res) => {
+    if(req.oidc.isAuthenticated()){
+        await nicknameHandler(req)
+    }
+    
+    res.redirect(`${process.env.ALLOWED_WEBSITE}/app/frontend/${!req.oidc.isAuthenticated() ? "signin.html" : ""}`)
+})
+
+
+app.get("/home/info", async (req, res) => {
+    if(req.oidc.accessToken == undefined){
+        return res.status(401).json({ error: "Missing Authentication" })
+    }
+    
+    res.header('Authorization', req.oidc.accessToken.access_token)
+
     res.json({
         permissions: {
             adminView: isAdmin(req),
@@ -270,8 +289,6 @@ app.get("/home/info", requiresAuth(), async (req, res) => {
 
             "Non è possibile depositare 0 €" : null
         },
-
-        //csrf_token : req.session.csrf_token
     })
 })
 
@@ -279,27 +296,23 @@ app.get("/home/me", async (req, res) => {
 })
 
 
-app.get("/logout", requiresAuth(), (req, res) => {
-    res.oidc.logout()
+app.get("/logout", checkJwt, (req, res) => {
+    req.oidc.logout()
 })
 
 
 /*  
         ONLY FETCH
-        console.log(req.get("Accept"))
-        if(req.get("Accept").includes("text/html")){
-            res.redirect("/home")
-        }
 
         */
 
-app.get("/account", requiresAuth(), async (req, res) => res.json(await getAccountInfo(req)) )
+app.get("/account", checkJwt, async (req, res) => res.json(await getAccountInfo(req)) )
 
-app.post("/account/deposit", requiresAuth(), async (req, res) => {
-    const { amount, csrf_token } = req.body
+app.post("/account/deposit", checkJwt, async (req, res) => {
+    const { amount } = req.body
 
     try {
-        bankBasicCheck(amount, req, csrf_token)
+        bankBasicCheck(amount)
         
         if (amount < bankConfig.minDeposit) {
             throw new Error("Errore di Deposito. Importo inferiore al Limite")
@@ -320,11 +333,11 @@ app.post("/account/deposit", requiresAuth(), async (req, res) => {
 
 
 // manda info account a frontend
-app.post("/account/withdraw", requiresAuth(), async (req, res) => {
-    const { amount, csrf_token } = req.body
+app.post("/account/withdraw", checkJwt, async (req, res) => {
+    const { amount } = req.body
     
     try {
-        bankBasicCheck(amount, req, csrf_token)
+        bankBasicCheck(amount)
         
         const oauth_sub = getOAuthSub(req)
 
@@ -352,7 +365,7 @@ app.post("/account/withdraw", requiresAuth(), async (req, res) => {
 
 
 //dd/mm/yyyy
-app.get("/account/history", requiresAuth(), async (req, res) => {
+app.get("/account/history", checkJwt, async (req, res) => {
     try {  
         res.json({
             success: true,
@@ -372,7 +385,7 @@ ADMIN
 */
 
 
-app.get("/admin/view", requiresAuth(), requiresAdmin, async (req, res) => {
+app.get("/admin/view", checkJwt, requiresAdmin, async (req, res) => {
     try{
         const usersInfo = []
         const infos = (await con.query(`SELECT * from users ORDER BY CASE role ${formatAdminViewQuery()}END`)).rows
@@ -411,7 +424,7 @@ BROKER
 
 */
 
-app.get("/broker/market", requiresAuth(), requiresBroker, async (req, res) => {
+app.get("/broker/market", checkJwt, requiresBroker, async (req, res) => {
     
     try{
         const markets = ["Apple Inc", "Remira Srl", "Astri Inc", "Nintendo Ltd"]
@@ -453,6 +466,15 @@ app.get("/broker/market", requiresAuth(), requiresBroker, async (req, res) => {
 
     } catch(error){ res.json(returnError("Failed to fetch Market Trend")) }
 })
+
+
+//Errors
+app.use((err, req, res, next) => {
+  if (err.status == 401) { return res.status(401).json({ error: 'Missing Authentication' }) }
+  if (err.status == 404) { return res.status(404).json({ error: 'Not Found' }) }
+  next(err)
+})
+
 
 app.listen(process.env.SERVER_PORT, () => {
     console.log(`Server running on http://localhost:${process.env.SERVER_PORT}`)

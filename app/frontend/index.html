@@ -13,12 +13,10 @@
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-transparent fixed-top py-2 px-3" style="z-index: 1000;">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-transparent fixed-top p-4 mb-5" style="z-index: 1000;">
         <div class="container d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center">
-                <img src="./img/favicon.ico" alt="Profilo" id="profilePicture" class="rounded-circle me-3"
-                    style="width:40px; height:40px; object-fit: cover;">
-                <span class="navbar-brand mb-0 h5 text-white">Banca Digitale</span>
+                <img id="profilePicture" class="rounded-circle w-50 img-fluid">
             </div>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
@@ -95,8 +93,6 @@
                                 <label for="amount" class="form-label">Importo (€)</label>
                                 <input type="number" class="form-control" id="amount" placeholder="Inserisci l'importo"
                                     step="0.01">
-
-                                <input type="hidden" value="<%= csrf_token %>" id="csrf_token">
                             </div>
 
                             <div class="row">
@@ -169,6 +165,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="./js/getToken.js"></script>
     <script src="./js/index.js"></script>
 
 </body>

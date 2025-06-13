@@ -4,7 +4,6 @@ document.addEventListener("DOMContentLoaded", () => {
   
   function updateTable(userArray) {
     userTableDiv.innerHTML = `
-      <div class="info-box">
         <div class="table-responsive">
           <table class="table table-striped table-dark table-hover mb-0">
             <thead>
@@ -28,7 +27,6 @@ document.addEventListener("DOMContentLoaded", () => {
               `).join('')}
             </tbody>
           </table>
-        </div>
       </div>
     `
 
@@ -45,7 +43,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   fetch("http://localhost:3000/admin/view", {
-    credentials: "include"
+    credentials: "include",
+    headers: getTokenHeader()
+    
   }).then(r => r.json()) .then(r => {
     if(r["success"]){
       users = r["usersInfo"]

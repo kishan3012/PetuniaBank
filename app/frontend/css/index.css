@@ -11,14 +11,6 @@ body {
     color: white;
 }
 
-#profilePicture {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
-
-}
-
-
 .header h1 {
     font-weight: bold;
     margin-bottom: 0.5rem;
@@ -214,7 +206,6 @@ body {
     max-width: 40px;
     max-height: 20px;
     border-radius: 0.4vw;
-    max-border-radius: 4px;
 }
 
 .money-bill {
@@ -238,7 +229,6 @@ body {
     color: white;
     font-weight: bold;
     font-size: 1.2vw;
-    max-font-size: 12px;
 }
 
 @keyframes fall {
@@ -266,11 +256,6 @@ body {
 }
 
 @media (max-width: 480px) {
-    #profilePicture {
-        width: 30px;
-        height: 30px;
-    }
-
     .money-bill,
     .money-bill-withdraw {
         width: 6vw;
@@ -290,7 +275,6 @@ body {
 
     .money-bill:before {
         font-size: 2vw;
-        max-font-size: none;
     }
 }
 
@@ -401,8 +385,4 @@ body {
 a {
     text-decoration: none;
     color: inherit;
-}
-
-.navbar-spacer {
-    height: 56px;
 }

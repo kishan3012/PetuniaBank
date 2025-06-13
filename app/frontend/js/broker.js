@@ -2,7 +2,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const ctx = document.getElementById('myChart').getContext('2d')
   
   fetch("http://localhost:3000/broker/market?market=0&yearsCount=5", {
-    credentials: "include"
+    credentials: "include",
+    headers: getTokenHeader()
+    
   }).then(r => r.json()).then(r => {
 
     if(r["success"]){

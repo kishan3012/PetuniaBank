@@ -9,7 +9,7 @@ function dropEmojisAndLogin() {
         document.body.appendChild(emoji)
         setTimeout(() => {
             emoji.remove()
-            window.location.href = "/login"
+            window.location.href = "http://localhost:3000/login"
         }, 2000)
     }
 }
